@@ -24,9 +24,7 @@
 #### Browsers
 
 * Chrome (133)
-* Firefox (133) (not yet fully tested in combination with mice)
-
-
+* Firefox (133)
 
 #### Hardware
 

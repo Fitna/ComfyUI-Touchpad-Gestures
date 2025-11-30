@@ -69,7 +69,7 @@ const processMouseWheel = e => {
     
     const shouldZoom = (isRealCtrlHeld) || isPinchGesture || (scrollZooming && !isTouchpadPan);
 
-    if (!navigator.userAgent.includes('Firefox') && shouldZoom) {
+    if (shouldZoom) {
       // ZOOM CORRECTION
       if (e.metaKey) deltaZoom *= -1 / 0.5;
       
@@ -92,5 +92,6 @@ const processMouseWheel = e => {
   }
 };
 
+app.canvasEl.parentElement.addEventListener("wheel", processMouseWheel);
 
 LGraphCanvas.prototype.processMouseWheel = () => enablePanning();
