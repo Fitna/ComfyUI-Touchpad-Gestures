@@ -2,51 +2,88 @@
 import { app } from '../../../scripts/app.js';
 const { LGraphCanvas } = window;
 
-const isTouchpad = e => e.wheelDelta ? Boolean(e.wheelDelta % 120) : e.deltaMode === 0;
-const isTouchpadZooming = e => e.ctrlKey && Boolean(e.deltaY % 100);
-const canTargetScroll = e => e.target.clientHeight < e.target.scrollHeight;
+// --- OPTIONS ---
+const scrollZooming = false;    // <--- false = pan canvas, true = zoom canvas
+const zoomSpeed = 0.15;         // Zoom speed for MOUSE (with Ctrl)
+const touchpadZoomSpeed = 1;    // Zoom speed for TOUCHPAD (Pinch)
+const allowPanningOverNonScrollableTextareas = true;
 
+// --- KEYBOARD TRACKER ---
+// Needed to distinguish real Ctrl from "phantom" Ctrl sent by browser during pinch
+let isRealCtrlHeld = false;
+
+window.addEventListener("keydown", (e) => {
+    if (e.key === "Control" || e.metaKey) isRealCtrlHeld = true;
+});
+window.addEventListener("keyup", (e) => {
+    if (e.key === "Control" || !e.metaKey) isRealCtrlHeld = false;
+});
+// Reset flag if switched to another window/tab
+window.addEventListener("blur", () => isRealCtrlHeld = false);
+
+
+// --- HELPER FUNCTIONS ---
+const isNativeTouchpadPan = e => {
+    if (e.wheelDeltaY !== undefined) {
+        return Math.abs(e.wheelDeltaY) % 120 !== 0;
+    }
+    return e.deltaMode === 0;
+};
+
+const canTargetScroll = e => e.target.clientHeight < e.target.scrollHeight;
 const oldProcessMouseWheel = LGraphCanvas.prototype.processMouseWheel;
 
-// Options
-const scrollZooming = true;
-const touchpadZooming = false;
-const zoomSpeed = 0.2;
-const touchpadZoomSpeed = 1;
-const allowPanningOverNonScrollableTextareas = true;
-const allowZoomingOverTextareas = false;
-
-const isFirefox = "onwheel" in app.canvasEl.parentElement;
 let isPanning = false;
-
 const enablePanning = () => isPanning = true;
 const disablePanning = () => (isPanning = false, document.removeEventListener("pointermove", disablePanning))
 
 const processMouseWheel = e => {
   const scale = app.canvas.ds.scale;
-  const touchpad = isTouchpad(e);
-  const touchpadZooming = isTouchpadZooming(e);
-  let deltaZoom = 100 / (touchpadZooming ? touchpadZoomSpeed : zoomSpeed) / scale;
 
-  if (e.target.tagName === "TEXTAREA" && allowPanningOverNonScrollableTextareas && !canTargetScroll(e)) enablePanning();
+  // 1. DETECT GESTURE TYPE
+  // Pinch has ctrlKey=true, but the physical key is not actually pressed
+  const isPinchGesture = e.ctrlKey && !isRealCtrlHeld;
+  
+  // 2. SELECT ZOOM SPEED
+  const currentSpeed = isPinchGesture ? touchpadZoomSpeed : zoomSpeed;
+  
+  let deltaZoom = 100 / currentSpeed / scale;
 
+  // Logic for scrolling over text areas
+  if (e.target.tagName === "TEXTAREA" && allowPanningOverNonScrollableTextareas && !canTargetScroll(e)) {
+      enablePanning();
+  }
+
+  // Main Logic
   if (app.canvas.graph && app.canvas.allow_dragcanvas && isPanning) {
     document.addEventListener("pointermove", disablePanning);
 
     let { deltaX, deltaY } = e;
+    // Support for horizontal scroll with Shift
     if (e.shiftKey) {
       deltaX = e.deltaY;
       deltaY = e.deltaX;
     }
 
-    if ((!isFirefox && (e.metaKey || e.ctrlKey || (scrollZooming && !touchpad))) || (touchpadZooming && touchpad)) {
+    const isTouchpadPan = isNativeTouchpadPan(e);
+    
+    const shouldZoom = (isRealCtrlHeld) || isPinchGesture || (scrollZooming && !isTouchpadPan);
+
+    if (!navigator.userAgent.includes('Firefox') && shouldZoom) {
+      // ZOOM CORRECTION
       if (e.metaKey) deltaZoom *= -1 / 0.5;
+      
+      e.preventDefault();
       app.canvas.ds.changeScale(scale - e.deltaY / deltaZoom, [e.clientX, e.clientY]);
       app.canvas.graph.change();
-    } else app.canvas.ds.mouseDrag(-deltaX, -deltaY);
+    } else {
+        // PANNING (SCROLL)
+        // Mouse wheel falls here if scrollZooming = false
+        // And normal touchpad movement (two-finger pan)
+        app.canvas.ds.mouseDrag(-deltaX, -deltaY);
+    }
     
     app.canvas.graph.change();
-    e.preventDefault();
     return false;
   } else {
     oldProcessMouseWheel.bind(app.canvas, e);
@@ -55,6 +92,5 @@ const processMouseWheel = e => {
   }
 };
 
-app.canvasEl.parentElement.addEventListener(isFirefox ? "wheel" : "mousewheel", processMouseWheel);
 
 LGraphCanvas.prototype.processMouseWheel = () => enablePanning();
