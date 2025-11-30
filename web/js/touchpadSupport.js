@@ -21,6 +21,13 @@ window.addEventListener("keyup", (e) => {
 // Reset flag if switched to another window/tab
 window.addEventListener("blur", () => isRealCtrlHeld = false);
 
+// --- PAGE SWAP FIX ---
+// Disable page swap with two fingers in macos.
+document.addEventListener('wheel', function(e) {
+    if (e.deltaX !== 0) {
+        e.preventDefault();
+    }
+}, { passive: false });
 
 // --- HELPER FUNCTIONS ---
 const isNativeTouchpadPan = e => {
@@ -58,14 +65,14 @@ const processMouseWheel = e => {
   if (app.canvas.graph && app.canvas.allow_dragcanvas && isPanning) {
     document.addEventListener("pointermove", disablePanning);
 
+    const isTouchpadPan = isNativeTouchpadPan(e);
+
     let { deltaX, deltaY } = e;
     // Support for horizontal scroll with Shift
-    if (e.shiftKey) {
+    if (!isTouchpadPan && e.shiftKey) {
       deltaX = e.deltaY;
-      deltaY = e.deltaX;
+      deltaY = 0;
     }
-
-    const isTouchpadPan = isNativeTouchpadPan(e);
     
     const shouldZoom = (isRealCtrlHeld) || isPinchGesture || (scrollZooming && !isTouchpadPan);
 
